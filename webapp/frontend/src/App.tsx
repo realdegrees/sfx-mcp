@@ -1,5 +1,6 @@
 import {
   ChevronLeft,
+  ClipboardCheck,
   ChevronRight,
   FolderOpen,
   LayoutDashboard,
@@ -11,10 +12,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
+import VolumeControl from "./components/VolumeControl";
 import Dashboard from "./pages/Dashboard";
 import Help from "./pages/Help";
 import Library from "./pages/Library";
 import Logs from "./pages/Logs";
+import Review from "./pages/Review";
 import SettingsPage from "./pages/SettingsPage";
 import Sounds from "./pages/Sounds";
 import Tools from "./pages/Tools";
@@ -22,6 +25,7 @@ import Tools from "./pages/Tools";
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/sounds", label: "Sounds", icon: Search, end: false },
+  { to: "/review", label: "Review", icon: ClipboardCheck, end: false },
   { to: "/library", label: "Library", icon: FolderOpen, end: false },
   { to: "/tools", label: "Tools", icon: Wrench, end: false },
   { to: "/logs", label: "Logs", icon: ScrollText, end: false },
@@ -74,6 +78,7 @@ export default function App() {
           />
           {!collapsed && <span>{backendOk ? "Backend up" : "Backend down"}</span>}
         </div>
+        <VolumeControl collapsed={collapsed} />
         <nav className="flex flex-col gap-1 p-2">
           {NAV.map((item) => (
             <NavLink
@@ -96,6 +101,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/sounds" element={<Sounds />} />
+          <Route path="/review" element={<Review />} />
           <Route path="/library" element={<Library />} />
           <Route path="/tools" element={<Tools />} />
           <Route path="/logs" element={<Logs />} />

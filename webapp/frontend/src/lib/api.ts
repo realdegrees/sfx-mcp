@@ -17,6 +17,25 @@ export interface Render {
   has_project: boolean;
 }
 
+export interface Review {
+  status: "picked" | "rejected" | null;
+  note: string;
+}
+
+export interface Candidate extends Render {
+  description: string;
+  source: string;
+  review: Review;
+}
+
+export interface Slot {
+  key: string;
+  title: string;
+  use: string;
+  pick: string;
+  candidates: Candidate[];
+}
+
 export interface McpTool {
   name: string;
   description: string;
@@ -53,6 +72,10 @@ export const api = {
     ),
   download: (sound_id: number) => post<unknown>("/api/sounds/download", { sound_id }),
   renders: () => get<{ success: boolean; results: Render[]; total: number }>("/api/renders"),
+  board: () => get<{ success: boolean; title: string; slots: Slot[] }>("/api/renders/board"),
+  picked: () => get<{ success: boolean; slots: Slot[] }>("/api/renders/picked"),
+  review: (name: string, review: Review) =>
+    post<{ success: boolean; review: Review }>(`/api/renders/${encodeURIComponent(name)}/review`, review),
   tools: () => get<{ tools: McpTool[]; count: number }>("/api/tools"),
   status: () =>
     get<{
