@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .config import config
@@ -96,6 +99,16 @@ async def download_sound(req: DownloadRequest):
     if not payload.get("success"):
         raise HTTPException(status_code=400, detail=payload.get("error") or "Download failed")
     return payload
+
+
+@router.get("/{sound_id}/file")
+async def local_sound_file(sound_id: int):
+    """Serve a downloaded sound so the browser can play it."""
+    _api_freesound, cache = _api()
+    sound = cache.get_sound(sound_id)
+    if not sound or not os.path.isfile(sound["local_path"]):
+        raise HTTPException(status_code=404, detail="Sound is not downloaded")
+    return FileResponse(sound["local_path"])
 
 
 @router.get("/{sound_id}")

@@ -29,7 +29,7 @@ def _error_response(error: str, error_type: str = "general", **kwargs) -> dict:
 @mcp.tool(annotations=_READ_ONLY)
 async def sfx_search(
     operation: Annotated[
-        Literal["search", "download", "tag", "list_local", "describe", "play", "authorize"],
+        Literal["search", "download", "tag", "list_local", "describe", "play", "authorize", "similar"],
         Field(description="Operation to perform."),
     ],
     query: Annotated[
@@ -39,7 +39,7 @@ async def sfx_search(
     duration_max: Annotated[
         int,
         Field(
-            description="Maximum sound duration in seconds. Only for: search.",
+            description="Maximum sound duration in seconds. Only for: search, similar.",
             ge=1,
         ),
     ] = 30,
@@ -49,11 +49,11 @@ async def sfx_search(
     ] = None,
     page: Annotated[
         int,
-        Field(description="Page number for paginated results. Only for: search.", ge=1),
+        Field(description="Page number for paginated results. Only for: search, similar.", ge=1),
     ] = 1,
     sound_id: Annotated[
         int | None,
-        Field(description="FreeSound sound ID. Required for: download, tag, describe."),
+        Field(description="FreeSound sound ID. Required for: download, tag, describe, similar."),
     ] = None,
     destination: Annotated[
         str | None,
@@ -93,6 +93,7 @@ async def sfx_search(
     - authorize: One-time OAuth2 setup that download needs. Without code, returns the URL
       the user opens to approve access; with code (shown on Freesound's page), stores a
       token that renews itself.
+    - similar: CC0 sounds acoustically similar to sound_id ("more like this").
 
     ## Return Format
     {"success": bool, "message": str, "data": {...}}
@@ -129,6 +130,8 @@ async def sfx_search(
             return await _handle_describe(api, sound_id)
         elif operation == "play":
             return _handle_play(sound_path)
+        elif operation == "similar":
+            return await _handle_similar(api, sound_id, duration_max, page)
         elif operation == "authorize":
             return await _handle_authorize(api, code)
         else:
@@ -149,31 +152,49 @@ async def _handle_search(
     count = result.get("count", 0)
     more = bool(result.get("next"))
 
-    items = []
-    for s in sounds:
-        items.append(
-            {
-                "id": s.get("id"),
-                "name": s.get("name"),
-                "duration": s.get("duration"),
-                "samplerate": s.get("samplerate"),
-                "tags": s.get("tags", []),
-                "preview": (
-                    s.get("previews", {}).get("preview-lq-mp3") if s.get("previews") else None
-                ),
-                "url": s.get("url"),
-            }
-        )
-
     return {
         "success": True,
         "message": f"Found {count} sounds. Showing page {page}.",
         "data": {
-            "sounds": items,
+            "sounds": [_sound_item(s) for s in sounds],
             "total": count,
             "page": page,
             "has_more": more,
             "query": query,
+        },
+    }
+
+
+def _sound_item(s: dict) -> dict:
+    return {
+        "id": s.get("id"),
+        "name": s.get("name"),
+        "duration": s.get("duration"),
+        "samplerate": s.get("samplerate"),
+        "tags": s.get("tags", []),
+        "preview": (s.get("previews", {}).get("preview-lq-mp3") if s.get("previews") else None),
+        "url": s.get("url"),
+    }
+
+
+async def _handle_similar(api, sound_id: int | None, duration_max: int, page: int) -> dict:
+    if sound_id is None:
+        return _error_response("sound_id is required for similar", "validation")
+    result = await api.similar(sound_id, page=page)
+    sounds = [
+        s
+        for s in result.get("results", [])
+        if "publicdomain/zero" in (s.get("license") or "")
+        and (s.get("duration") or 0) <= duration_max
+    ]
+    return {
+        "success": True,
+        "message": f"{len(sounds)} CC0 sounds similar to {sound_id} on page {page}.",
+        "data": {
+            "sounds": [_sound_item(s) for s in sounds],
+            "page": page,
+            "has_more": bool(result.get("next")),
+            "similar_to": sound_id,
         },
     }
 

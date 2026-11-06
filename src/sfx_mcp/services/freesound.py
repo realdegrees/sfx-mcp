@@ -98,6 +98,18 @@ class FreeSoundAPI:
         }
         return await self._request("GET", "/search/text/", params=params)
 
+    async def similar(self, sound_id: int, page: int = 1) -> dict:
+        """Sounds acoustically similar to sound_id. This endpoint ignores the license filter."""
+        return await self._request(
+            "GET",
+            f"/sounds/{sound_id}/similar/",
+            params={
+                "page": page,
+                "page_size": 50,
+                "fields": "id,name,description,duration,samplerate,tags,previews,url,license",
+            },
+        )
+
     async def get_sound_detail(self, sound_id: int) -> dict:
         """Get detailed metadata for a specific sound."""
         return await self._request(

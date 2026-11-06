@@ -7,6 +7,7 @@ export interface Sound {
   license: string;
   url?: string;
   local_path?: string;
+  user_tags?: string[];
 }
 
 export interface McpTool {
