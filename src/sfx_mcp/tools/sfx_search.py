@@ -192,6 +192,8 @@ async def _handle_download(api, cache, sound_id: int | None, destination: str | 
         safe_name = f"sound_{sound_id}"
 
     ext = detail.get("type", "wav")
+    if safe_name.lower().endswith(f".{ext}".lower()):
+        safe_name = safe_name[: -len(ext) - 1]
     file_path = os.path.join(dest_dir, f"{safe_name}.{ext}")
 
     content = await api.download_original(sound_id)

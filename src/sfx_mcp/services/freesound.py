@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import os
+import secrets
 import time
 from collections import deque
 
@@ -106,13 +109,37 @@ class FreeSoundAPI:
         )
 
     def authorize_url(self) -> str:
+        verifier = secrets.token_urlsafe(64)
+        challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest())
+            .rstrip(b"=")
+            .decode()
+        )
+        os.makedirs(os.path.dirname(config.SFX_TOKEN_PATH) or ".", exist_ok=True)
+        with open(self._verifier_path(), "w", encoding="utf-8") as f:
+            f.write(verifier)
         return (
             f"{config.API_BASE_URL}/oauth2/authorize/"
             f"?client_id={config.FREESOUND_CLIENT_ID}&response_type=code"
+            f"&code_challenge={challenge}&code_challenge_method=S256"
         )
 
     async def exchange_code(self, code: str) -> None:
-        await self._token_request({"grant_type": "authorization_code", "code": code})
+        try:
+            with open(self._verifier_path(), encoding="utf-8") as f:
+                verifier = f.read().strip()
+        except OSError as e:
+            raise RuntimeError(
+                "No pending authorization. Call authorize without a code first."
+            ) from e
+        await self._token_request(
+            {"grant_type": "authorization_code", "code": code, "code_verifier": verifier}
+        )
+        os.remove(self._verifier_path())
+
+    @staticmethod
+    def _verifier_path() -> str:
+        return os.path.join(os.path.dirname(config.SFX_TOKEN_PATH), "oauth_pkce_verifier")
 
     def has_oauth_token(self) -> bool:
         return self._load_token() is not None
