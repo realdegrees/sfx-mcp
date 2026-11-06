@@ -1,8 +1,8 @@
-import { Check, MessageSquare, X } from "lucide-react";
+import { Check, CheckCheck, Wrench, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type Candidate, type Review, type Slot, api } from "../lib/api";
 
-function NoteEditor({
+function ModifyEditor({
   initial,
   onSave,
   onClose,
@@ -15,7 +15,7 @@ function NoteEditor({
   }, []);
 
   const commit = () => {
-    if (note !== initial) onSave(note.trim());
+    if (note.trim() !== initial) onSave(note.trim());
     onClose();
   };
 
@@ -32,14 +32,44 @@ function NoteEditor({
           commit();
         }
       }}
-      placeholder="What to change, or where a problem is. Enter saves, Esc cancels."
+      placeholder="What should the agent change? Enter saves, Esc cancels, an empty note withdraws the request."
       rows={3}
-      className="mt-3 w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1 text-sm"
+      className="mt-3 w-full rounded border border-amber-600/60 bg-zinc-950 px-2 py-1 text-sm"
     />
   );
 }
 
-function CandidateCard({ candidate, onSaved }: { candidate: Candidate; onSaved: () => void }) {
+function IconButton({
+  active,
+  activeClass,
+  title,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  activeClass: string;
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`rounded p-1.5 ${active ? activeClass : "text-zinc-400 hover:bg-zinc-800 hover:text-white"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CandidateCard({
+  candidate,
+  onSaved,
+  compact,
+}: { candidate: Candidate; onSaved: () => void; compact: boolean }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const { status, note } = candidate.review;
@@ -47,20 +77,27 @@ function CandidateCard({ candidate, onSaved }: { candidate: Candidate; onSaved: 
   const save = (review: Review) =>
     api
       .review(candidate.name, review)
-      .then(onSaved)
+      .then(() => {
+        setError("");
+        onSaved();
+      })
       .catch((e: Error) => setError(e.message));
 
+  const decided = !compact && (status === "picked" || status === "rejected");
   const frame =
     status === "picked"
       ? "border-emerald-600 bg-emerald-950/40"
-      : status === "rejected"
-        ? "border-zinc-800 bg-zinc-900/60 opacity-50 hover:opacity-80"
-        : "border-zinc-800 bg-zinc-900";
+      : status === "modify"
+        ? "border-amber-600/70 bg-amber-950/20"
+        : status === "rejected"
+          ? "border-red-900/60 bg-zinc-900/60"
+          : "border-zinc-800 bg-zinc-900";
+  const fade = decided ? "opacity-40 saturate-50 transition hover:opacity-90 hover:saturate-100" : "";
 
-  const toggle = (next: "picked" | "rejected") => save({ status: status === next ? null : next, note });
+  const toggle = (next: "picked" | "rejected") => save({ status: status === next ? null : next, note: "" });
 
   return (
-    <li className={`flex flex-col rounded-lg border p-4 ${frame}`} data-testid={`candidate-${candidate.name}`}>
+    <li className={`flex flex-col rounded-lg border p-4 ${frame} ${fade}`} data-testid={`candidate-${candidate.name}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate font-mono text-sm font-semibold">{candidate.name}</div>
@@ -70,49 +107,57 @@ function CandidateCard({ candidate, onSaved }: { candidate: Candidate; onSaved: 
           </div>
         </div>
         <div className="flex shrink-0 gap-1">
-          <button
-            type="button"
-            onClick={() => toggle("picked")}
+          <IconButton
+            active={status === "picked"}
+            activeClass="bg-emerald-600 text-white"
             title="Pick"
-            aria-label="Pick"
-            className={`rounded p-1.5 ${status === "picked" ? "bg-emerald-600 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"}`}
+            onClick={() => toggle("picked")}
           >
             <Check size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => toggle("rejected")}
+          </IconButton>
+          <IconButton
+            active={status === "modify" || editing}
+            activeClass="bg-amber-600 text-white"
+            title="Ask the agent to modify"
+            onClick={() => setEditing((v) => !v)}
+          >
+            <Wrench size={16} />
+          </IconButton>
+          <IconButton
+            active={status === "rejected"}
+            activeClass="bg-red-700 text-white"
             title="Reject"
-            aria-label="Reject"
-            className={`rounded p-1.5 ${status === "rejected" ? "bg-red-700 text-white" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"}`}
+            onClick={() => toggle("rejected")}
           >
             <X size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            title={note ? "Edit note" : "Add note"}
-            aria-label={note ? "Edit note" : "Add note"}
-            className={`rounded p-1.5 ${note || editing ? "text-amber-300" : "text-zinc-400"} hover:bg-zinc-800 hover:text-white`}
-          >
-            <MessageSquare size={16} />
-          </button>
+          </IconButton>
         </div>
       </div>
       {candidate.description && (
         <p className="mt-2 flex-1 text-sm leading-snug text-zinc-300">{candidate.description}</p>
       )}
-      {note && !editing && (
+      {candidate.revised && (
+        <p className="mt-2 rounded border-l-2 border-sky-400 bg-zinc-950/60 px-2 py-1 text-xs text-sky-200">
+          Revised: {candidate.revised}
+        </p>
+      )}
+      {status === "modify" && !editing && (
         <button
           type="button"
           onClick={() => setEditing(true)}
           className="mt-2 rounded border-l-2 border-amber-400 bg-zinc-950/60 px-2 py-1 text-left text-xs text-amber-200"
         >
-          {note}
+          Change: {note}
         </button>
       )}
       {editing && (
-        <NoteEditor initial={note} onSave={(next) => save({ status, note: next })} onClose={() => setEditing(false)} />
+        <ModifyEditor
+          initial={status === "modify" ? note : ""}
+          onSave={(next) =>
+            save(next ? { status: "modify", note: next } : { status: status === "modify" ? null : status, note: "" })
+          }
+          onClose={() => setEditing(false)}
+        />
       )}
       <audio
         controls
@@ -133,17 +178,24 @@ export default function ReviewBoard({
   return (
     <div className="mt-4 space-y-10" data-testid="review-board">
       {slots.map((slot) => {
-        const picked = slot.candidates.filter((c) => c.review.status === "picked").map((c) => c.name);
+        const pending = slot.candidates.filter((c) => c.review.status === null).length;
         return (
           <section key={slot.key}>
-            <div className="flex flex-wrap items-baseline gap-3 border-b border-zinc-800 pb-2">
+            <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 pb-2">
               <h3 className="text-base font-semibold">{slot.title}</h3>
+              {compact && slot.round && <span className="text-xs text-zinc-500">{slot.round}</span>}
               <span className="text-xs text-zinc-500">
                 {slot.candidates.length}{" "}
                 {compact ? "picked" : slot.candidates.length === 1 ? "candidate" : "candidates"}
               </span>
-              {!compact && picked.length > 0 && (
-                <span className="text-xs text-emerald-400">Picked: {picked.join(", ")}</span>
+              {!compact && pending > 0 && (
+                <button
+                  type="button"
+                  onClick={() => api.pickRemaining(slot.key).then(onSaved)}
+                  className="ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs text-emerald-300 hover:bg-zinc-800"
+                >
+                  <CheckCheck size={14} /> Pick remaining ({pending})
+                </button>
               )}
             </div>
             <div className="mt-2 grid gap-x-8 gap-y-1 text-sm text-zinc-400 lg:grid-cols-[1fr_auto]">
@@ -155,7 +207,7 @@ export default function ReviewBoard({
             ) : (
               <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {slot.candidates.map((c) => (
-                  <CandidateCard key={`${c.name}-${c.modified}`} candidate={c} onSaved={onSaved} />
+                  <CandidateCard key={`${c.name}-${c.modified}`} candidate={c} onSaved={onSaved} compact={compact} />
                 ))}
               </ul>
             )}

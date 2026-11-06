@@ -18,13 +18,14 @@ export interface Render {
 }
 
 export interface Review {
-  status: "picked" | "rejected" | null;
+  status: "picked" | "rejected" | "modify" | null;
   note: string;
 }
 
 export interface Candidate extends Render {
   description: string;
   source: string;
+  revised: string;
   review: Review;
 }
 
@@ -33,7 +34,17 @@ export interface Slot {
   title: string;
   use: string;
   pick: string;
+  round?: string;
   candidates: Candidate[];
+}
+
+export interface Submission {
+  status?: "waiting" | "working" | "done";
+  round?: string;
+  submitted_at?: string;
+  counts?: { picked: number; rejected: number; modify: number; pending: number };
+  modify?: { name: string; slot: string; note: string }[];
+  agent_message?: string;
 }
 
 export interface McpTool {
@@ -72,8 +83,13 @@ export const api = {
     ),
   download: (sound_id: number) => post<unknown>("/api/sounds/download", { sound_id }),
   renders: () => get<{ success: boolean; results: Render[]; total: number }>("/api/renders"),
-  board: () => get<{ success: boolean; title: string; slots: Slot[] }>("/api/renders/board"),
+  board: () => get<{ success: boolean; id: string; title: string; slots: Slot[] }>("/api/renders/board"),
+
   picked: () => get<{ success: boolean; slots: Slot[] }>("/api/renders/picked"),
+  pickRemaining: (slot?: string) =>
+    post<{ success: boolean; picked: string[] }>("/api/renders/pick-remaining", { slot: slot ?? null }),
+  submission: () => get<{ success: boolean; submission: Submission }>("/api/renders/submission"),
+  submit: () => post<{ success: boolean; submission: Submission }>("/api/renders/submission", {}),
   review: (name: string, review: Review) =>
     post<{ success: boolean; review: Review }>(`/api/renders/${encodeURIComponent(name)}/review`, review),
   tools: () => get<{ tools: McpTool[]; count: number }>("/api/tools"),

@@ -1,5 +1,6 @@
 import { Download, Search } from "lucide-react";
 import { useState } from "react";
+import Downloads from "../components/Downloads";
 import { type Sound, api } from "../lib/api";
 
 export default function Sounds() {
@@ -103,6 +104,7 @@ export default function Sounds() {
           </li>
         ))}
       </ul>
+      <Downloads />
     </div>
   );
 }
