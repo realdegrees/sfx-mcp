@@ -10,6 +10,13 @@ export interface Sound {
   user_tags?: string[];
 }
 
+export interface Render {
+  name: string;
+  duration: number | null;
+  modified: number;
+  has_project: boolean;
+}
+
 export interface McpTool {
   name: string;
   description: string;
@@ -45,6 +52,7 @@ export const api = {
       tag ? `/api/sounds/local?tag=${encodeURIComponent(tag)}` : "/api/sounds/local",
     ),
   download: (sound_id: number) => post<unknown>("/api/sounds/download", { sound_id }),
+  renders: () => get<{ success: boolean; results: Render[]; total: number }>("/api/renders"),
   tools: () => get<{ tools: McpTool[]; count: number }>("/api/tools"),
   status: () =>
     get<{

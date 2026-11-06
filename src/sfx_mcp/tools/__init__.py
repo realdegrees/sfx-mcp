@@ -14,6 +14,7 @@ def register_all_tools(mcp: "FastMCP") -> None:  # noqa: F821
     _modules = [
         "sfx_mcp.tools.sfx_search",
         "sfx_mcp.tools.prefab_cards",
+        "sfx_mcp.tools.audio_tools",
     ]
     for mod_name in _modules:
         try:

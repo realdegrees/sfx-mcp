@@ -30,7 +30,14 @@ logger = logging.getLogger("sfx-mcp")
 
 mcp = FastMCP(
     "sfx-mcp",
-    instructions="Search and download CC0-licensed sound effects from FreeSound.org",
+    instructions=(
+        "Find, download and design game sound effects. sfx_search finds and downloads CC0 "
+        "sounds from Freesound (similar = more like a given sound). The audio_* tools shape "
+        "and layer them with ffmpeg: read audio_guide for the request's words first (it maps "
+        "words like 'heavier' or 'less harsh' to effects), inspect sources, render candidates "
+        "with audio_process / audio_render, check them with audio_inspect, and let the user "
+        "listen in the web UI (Library page) before revising. Renders go to data/renders."
+    ),
     version="0.1.0",
 )
 mcp.add_middleware(ToolActivityMiddleware())
@@ -243,6 +250,10 @@ def main():
 from .api_sounds import router as sounds_router  # noqa: E402
 
 app.include_router(sounds_router, prefix="/api/sounds", tags=["sounds"])
+
+from .api_renders import router as renders_router  # noqa: E402
+
+app.include_router(renders_router, prefix="/api/renders", tags=["renders"])
 
 # Mount last: the MCP app owns /mcp, the REST routes above keep their paths.
 app.mount("/mcp", mcp_app)

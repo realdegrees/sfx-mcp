@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { type Sound, api } from "../lib/api";
+import { type Render, type Sound, api } from "../lib/api";
 
 export default function Library() {
   const [sounds, setSounds] = useState<Sound[]>([]);
+  const [renders, setRenders] = useState<Render[]>([]);
   const [tag, setTag] = useState("");
   const [error, setError] = useState("");
 
@@ -17,13 +18,48 @@ export default function Library() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const load = () =>
+      api
+        .renders()
+        .then((d) => setRenders(d.results))
+        .catch((e: Error) => setError(e.message));
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div>
       <h1 className="text-xl font-bold" data-testid="library-title">
         Library
       </h1>
-      <p className="mt-1 text-sm text-zinc-400">Sounds cached on this machine. Works without an API key.</p>
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
+      <h2 className="mt-6 text-lg font-semibold">Renders</h2>
+      <p className="mt-1 text-sm text-zinc-400">Sounds the agent designed. Refreshes by itself.</p>
+      {renders.length === 0 ? (
+        <p className="mt-4 text-sm text-zinc-500">No renders yet.</p>
+      ) : (
+        <ul className="mt-4 space-y-2" data-testid="render-list">
+          {renders.map((r) => (
+            <li key={r.name} className="rounded border border-zinc-800 bg-zinc-900 px-4 py-3">
+              <div className="flex items-baseline gap-3">
+                <span className="font-mono text-sm font-semibold">{r.name}</span>
+                {r.duration !== null && <span className="text-xs text-zinc-500">{r.duration.toFixed(2)}s</span>}
+                <span className="text-xs text-zinc-600">{new Date(r.modified * 1000).toLocaleTimeString()}</span>
+              </div>
+              <audio
+                controls
+                preload="none"
+                src={`/api/renders/${encodeURIComponent(r.name)}/file?v=${r.modified}`}
+                className="mt-2 w-full"
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      <h2 className="mt-8 text-lg font-semibold">Downloads</h2>
+      <p className="mt-1 text-sm text-zinc-400">Freesound originals cached on this machine.</p>
       <input
         value={tag}
         onChange={(e) => setTag(e.target.value)}
@@ -33,7 +69,7 @@ export default function Library() {
       />
       {sounds.length === 0 ? (
         <p className="mt-6 text-sm text-zinc-500" data-testid="library-empty">
-          Library is empty — cache sounds from the Sounds page.
+          No downloads yet. Cache sounds from the Sounds page.
         </p>
       ) : (
         <ul className="mt-4 space-y-2" data-testid="library-list">
