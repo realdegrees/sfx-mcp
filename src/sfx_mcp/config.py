@@ -16,6 +16,10 @@ def _repo_path(value: str) -> str:
 @dataclass
 class Config:
     FREESOUND_API_KEY: str = field(default_factory=lambda: os.getenv("FREESOUND_API_KEY", ""))
+    FREESOUND_CLIENT_ID: str = field(default_factory=lambda: os.getenv("FREESOUND_CLIENT_ID", ""))
+    SFX_TOKEN_PATH: str = field(
+        default_factory=lambda: _repo_path(os.getenv("SFX_TOKEN_PATH", "data/oauth_token.json"))
+    )
     SFX_LOCAL_PATH: str = field(
         default_factory=lambda: _repo_path(os.getenv("SFX_LOCAL_PATH", "data/sounds"))
     )

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import time
 from collections import deque
 
@@ -103,13 +105,81 @@ class FreeSoundAPI:
             },
         )
 
-    async def get_download_url(self, sound_id: int) -> str:
-        """Get the download URL for a sound's original file.
+    def authorize_url(self) -> str:
+        return (
+            f"{config.API_BASE_URL}/oauth2/authorize/"
+            f"?client_id={config.FREESOUND_CLIENT_ID}&response_type=code"
+        )
 
-        Returns the redirect URL for downloading.
-        """
-        data = await self._request("GET", f"/sounds/{sound_id}/download/")
-        return data.get("download_url") or data.get("url", "")
+    async def exchange_code(self, code: str) -> None:
+        await self._token_request({"grant_type": "authorization_code", "code": code})
+
+    def has_oauth_token(self) -> bool:
+        return self._load_token() is not None
+
+    def _load_token(self) -> dict | None:
+        try:
+            with open(config.SFX_TOKEN_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    async def _token_request(self, grant: dict) -> dict:
+        response = await self.client.post(
+            "/oauth2/access_token/",
+            data={
+                "client_id": config.FREESOUND_CLIENT_ID,
+                "client_secret": self.api_key,
+                **grant,
+            },
+        )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"FreeSound OAuth2 token request failed ({response.status_code}): "
+                f"{response.text[:300]}"
+            )
+        data = response.json()
+        token = {
+            "access_token": data["access_token"],
+            "refresh_token": data["refresh_token"],
+            # Renew a minute early so a token never expires mid-download.
+            "expires_at": time.time() + int(data.get("expires_in", 86400)) - 60,
+        }
+        os.makedirs(os.path.dirname(config.SFX_TOKEN_PATH) or ".", exist_ok=True)
+        with open(config.SFX_TOKEN_PATH, "w", encoding="utf-8") as f:
+            json.dump(token, f)
+        return token
+
+    async def _access_token(self) -> str:
+        token = self._load_token()
+        if token is None:
+            raise RuntimeError(
+                "Downloads need a one-time OAuth2 authorization. Call "
+                "sfx_search(operation='authorize') for the URL, then pass the code "
+                "it shows as sfx_search(operation='authorize', code=...)."
+            )
+        if time.time() >= token["expires_at"]:
+            token = await self._token_request(
+                {"grant_type": "refresh_token", "refresh_token": token["refresh_token"]}
+            )
+        return token["access_token"]
+
+    async def download_original(self, sound_id: int) -> bytes:
+        """Download a sound's original file. FreeSound accepts only OAuth2 here."""
+        access = await self._access_token()
+        async with self._semaphore:
+            await self._rate_limit()
+            response = await self.client.get(
+                f"/sounds/{sound_id}/download/",
+                headers={"Authorization": f"Bearer {access}"},
+                follow_redirects=True,
+                timeout=120.0,
+            )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"FreeSound download failed ({response.status_code}): {response.text[:300]}"
+            )
+        return response.content
 
     async def close(self) -> None:
         if self._client:

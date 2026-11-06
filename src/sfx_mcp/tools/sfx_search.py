@@ -4,7 +4,6 @@ import logging
 import os
 from typing import Annotated, Literal
 
-import httpx
 from pydantic import Field
 
 from ..config import config
@@ -30,7 +29,7 @@ def _error_response(error: str, error_type: str = "general", **kwargs) -> dict:
 @mcp.tool(annotations=_READ_ONLY)
 async def sfx_search(
     operation: Annotated[
-        Literal["search", "download", "tag", "list_local", "describe", "play"],
+        Literal["search", "download", "tag", "list_local", "describe", "play", "authorize"],
         Field(description="Operation to perform."),
     ],
     query: Annotated[
@@ -72,6 +71,13 @@ async def sfx_search(
         str | None,
         Field(description="Path to local sound file. Required for: play."),
     ] = None,
+    code: Annotated[
+        str | None,
+        Field(
+            description="OAuth2 code from Freesound's permission page. Only for: authorize "
+            "(omit it to get the authorization URL)."
+        ),
+    ] = None,
 ) -> dict:
     """[RATIONALE] Consolidated portmanteau for all FreeSound operations -
     search, download, tag, list local cache, and describe metadata - to avoid
@@ -84,6 +90,9 @@ async def sfx_search(
     - list_local: List all locally cached sounds, optionally filtered by tag.
     - describe: Get full metadata for a specific sound from FreeSound.
     - play: Play a locally cached sound file using the system default player.
+    - authorize: One-time OAuth2 setup that download needs. Without code, returns the URL
+      the user opens to approve access; with code (shown on Freesound's page), stores a
+      token that renews itself.
 
     ## Return Format
     {"success": bool, "message": str, "data": {...}}
@@ -120,6 +129,8 @@ async def sfx_search(
             return await _handle_describe(api, sound_id)
         elif operation == "play":
             return _handle_play(sound_path)
+        elif operation == "authorize":
+            return await _handle_authorize(api, code)
         else:
             return _error_response(f"Unknown operation: {operation}", "validation")
     except RuntimeError as e:
@@ -183,19 +194,9 @@ async def _handle_download(api, cache, sound_id: int | None, destination: str | 
     ext = detail.get("type", "wav")
     file_path = os.path.join(dest_dir, f"{safe_name}.{ext}")
 
-    download_url = await api.get_download_url(sound_id)
-    if not download_url:
-        return _error_response("No download URL available for this sound", "api_error")
-
-    async with httpx.AsyncClient(timeout=120.0) as dl_client:
-        response = await dl_client.get(
-            download_url,
-            headers={"Authorization": f"Token {config.FREESOUND_API_KEY}"},
-            follow_redirects=True,
-        )
-        response.raise_for_status()
-        with open(file_path, "wb") as f:
-            f.write(response.content)
+    content = await api.download_original(sound_id)
+    with open(file_path, "wb") as f:
+        f.write(content)
 
     cache.add_sound(
         sound_id=sound_id,
@@ -216,6 +217,24 @@ async def _handle_download(api, cache, sound_id: int | None, destination: str | 
             "file_path": file_path,
             "file_size": os.path.getsize(file_path),
         },
+    }
+
+
+async def _handle_authorize(api, code: str | None) -> dict:
+    if not config.FREESOUND_CLIENT_ID:
+        return _error_response("FREESOUND_CLIENT_ID is not set in .env", "auth")
+    if not code:
+        return {
+            "success": True,
+            "message": "Open the URL, click Authorize, then call authorize again with the "
+            "code Freesound shows. Codes expire after 10 minutes.",
+            "data": {"url": api.authorize_url(), "authorized": api.has_oauth_token()},
+        }
+    await api.exchange_code(code.strip())
+    return {
+        "success": True,
+        "message": "Authorized. Downloads now work and the token renews itself.",
+        "data": {"authorized": True},
     }
 
 
